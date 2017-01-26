@@ -12,6 +12,8 @@ import 'rxjs/add/operator/catch';
 // import 'rxjs/add/operator/filereader';
 // import Rx from 'rx-dom';
 
+let fabric = require('fabric');
+
 var sha1 =  require('sha1');
 
 require('./file-uploader.component.less');
