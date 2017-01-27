@@ -1,6 +1,7 @@
 import { Component } from '@angular/core';
 import MspDataService from '../service/msp-data.service';
 import { Router } from '@angular/router';
+import {MspImage} from "../model/msp-image";
 
 require('./landing.component.less')
 
@@ -15,6 +16,22 @@ require('./landing.component.less')
 })
 export class LandingComponent {
   lang = require('./i18n')
+
+  images = new Array<MspImage>();
+
+  addDocument(evt:MspImage){
+    console.log('image added: %s', evt);
+    this.images = [...this.images, evt];
+
+  }
+
+  deleteDocument(evt:MspImage){
+    this.images = this.images.filter(
+      (mspImage:MspImage) => {
+        return evt.uuid !== mspImage.uuid;
+      }
+    );
+  }
 
   constructor(private mspDataService:MspDataService, private router: Router){
 

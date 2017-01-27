@@ -12,6 +12,8 @@ import 'rxjs/add/operator/catch';
 // import 'rxjs/add/operator/filereader';
 // import Rx from 'rx-dom';
 
+let fabricjs = require('fabric');
+
 var sha1 =  require('sha1');
 
 require('./file-uploader.component.less');
@@ -136,7 +138,9 @@ export class FileUploaderComponent implements OnInit {
 
         mspImage.naturalHeight = imgEl.naturalHeight;
         mspImage.naturalWidth = imgEl.naturalWidth;
-        
+
+        let canvas = new fabricjs.fabric.Canvas(mspImage.uuid);
+
         observer.next(mspImage);
         observer.complete();
       }
