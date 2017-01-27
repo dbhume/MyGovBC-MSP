@@ -22,6 +22,7 @@ export class LandingComponent {
   addDocument(evt:MspImage){
     console.log('image added: %s', evt);
     this.images = [...this.images, evt];
+
   }
 
   deleteDocument(evt:MspImage){
