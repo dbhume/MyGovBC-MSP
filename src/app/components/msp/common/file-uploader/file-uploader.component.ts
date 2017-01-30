@@ -1,20 +1,19 @@
-import {Component, ViewChild, ElementRef, OnInit, EventEmitter, ViewContainerRef, Output, Input} from '@angular/core';
-import { DomSanitizer, SafeUrl } from '@angular/platform-browser';
-import { MspImage } from '../../model/msp-image';
-import { Observable } from 'rxjs/Observable';
-// import { Subject } from 'rxjs/subject';
-// import { ReplaySubject } from 'rxjs/ReplaySubject';
-
+import {
+  Component, ViewChild, ElementRef, OnInit, EventEmitter, ViewContainerRef, Output, Input,
+  Inject
+} from '@angular/core';
+import {DomSanitizer, SafeUrl} from '@angular/platform-browser';
+import {MspImage} from '../../model/msp-image';
+import {Observable} from 'rxjs/Observable';
 import 'rxjs/add/observable/fromEvent';
 import 'rxjs/add/operator/map';
 import 'rxjs/add/operator/do';
 import 'rxjs/add/operator/catch';
-// import 'rxjs/add/operator/filereader';
-// import Rx from 'rx-dom';
+import {ModalDirective} from "ng2-bootstrap";
 
 let loadImage = require('blueimp-load-image');
 
-var sha1 =  require('sha1');
+var sha1 = require('sha1');
 
 require('./file-uploader.component.less');
 @Component({
@@ -28,19 +27,24 @@ export class FileUploaderComponent implements OnInit {
   @ViewChild('dropZone') dropZone: ElementRef;
   @ViewChild('browseFileRef') browseFileRef: ElementRef;
   @ViewChild('captureFileRef') captureFileRef: ElementRef;
-  
+  @ViewChild('errorModal') public fullSizeViewModal: ModalDirective;
+
   private trustedUrl: SafeUrl;
   private maxFileSize: number;
   private fileSizeError: string;
-  private MAX_IMAGE_COUNT:number = 10;
-  
+  private MAX_IMAGE_COUNT: number = 10;
+
+  imageWithError: MspImage;
+
   @Input() images: Array<MspImage>;
   @Input() id: string;
 
   @Output() onAddDocument: EventEmitter<MspImage> = new EventEmitter<MspImage>();
   @Output() onDeleteDocument: EventEmitter<MspImage> = new EventEmitter<MspImage>();
-  constructor(private sanitizer: DomSanitizer, 
-    private viewContainerRef: ViewContainerRef) {
+
+  constructor(private sanitizer: DomSanitizer,
+              private viewContainerRef: ViewContainerRef,
+              @Inject('appConstants') private appConstants: Object) {
     this.maxFileSize = 8 * 1024 * 1024;
   }
 
@@ -50,8 +54,8 @@ export class FileUploaderComponent implements OnInit {
       Observable.fromEvent<DragEvent>(this.dropZone.nativeElement, "dragover");
 
     /**
-     * Must cancel the dragover event in order for the drop event to work. 
-     */  
+     * Must cancel the dragover event in order for the drop event to work.
+     */
     dragOverStream.map(evt => {
       return event;
     }).subscribe(evt => {
@@ -67,127 +71,172 @@ export class FileUploaderComponent implements OnInit {
         return event.dataTransfer.files;
       }
     )
-    
+
     var browseFileStream = Observable.fromEvent<Event>(this.browseFileRef.nativeElement, 'change');
     var captureFileStream = Observable.fromEvent<Event>(this.captureFileRef.nativeElement, 'change');
 
     var filesArrayFromInput = browseFileStream.merge(captureFileStream)
-    .map(
-      (event) => {
-        event.preventDefault();
-        return event.target['files'];
-      }
-    ).merge(filesArrayFromDrop)
-    .filter(files => {
-      return !!files && files.length && files.length > 0;
-    }).filter((files)=>{
-      return files[0].size <= this.maxFileSize;
-    }).flatMap(
-      (fileList:FileList) => {
-        return this.observableFromFile(fileList[0]);
-      }
-    ).filter(
-      (mspImage:MspImage) => {
-        return !this.checkImageExists(mspImage, this.images);
-      }
-    )
-    .subscribe(
-      (file:MspImage) => {
-        this.handleImageFile(file);
-      },
+      .map(
+        (event) => {
+          event.preventDefault();
+          return event.target['files'];
+        }
+      ).merge(filesArrayFromDrop)
+      .filter(files => {
+        return !!files && files.length && files.length > 0;
+      }).filter((files) => {
+        return files[0].size <= this.maxFileSize;
+      }).flatMap(
+        (fileList: FileList) => {
+          return this.observableFromFile(fileList[0]);
+        }
+      ).filter(
+        (mspImage: MspImage) => {
+          return !this.checkImageExists(mspImage, this.images);
+        }
+      )
+      .subscribe(
+        (file: MspImage) => {
 
-      (error) => {
-        console.log('drop event error detected:');
-        console.log(error);
-      }
-    );
+          this.handleImageFile(file);
+        },
+
+        (error) => {
+          console.log('drop event error detected:');
+          console.log(error);
+        }
+      );
   }
 
-  observableFromFile(file:File){
-    let reader:FileReader = new FileReader();
+  observableFromFile(file: File) {
+    // Init
+    let reader: FileReader = new FileReader();
+    let mspImage: MspImage = new MspImage();
 
-    // let scaledImage = loadImage.scale(
-    //   file, // img element
-    //   function (img:HTMLImageElement) {
-    //     mspImage.fileContent = img.src;
-    //
-    //
-    //
-    //
-    //   },
-    //   {maxWidth: 600}
-    // );
-    //
-    let fileObservable = Observable.create((observer:any) => {
-      reader.onload = function(evt:any) {
-        let mspImage: MspImage = new MspImage();
-        mspImage.fileContent = reader.result;
-        mspImage.id = sha1(reader.result);
-        // console.log(`generated file id: ${mspImage.id}`);
+    // Copy file properties
+    mspImage.name = file.name;
+    mspImage.contentType = file.type;
 
-        let nBytes = file.size;
-        let fileSize = '';
-        let fileSizeUnit = '';
-        let name = file.name;
-        let sOutput:string = nBytes + " bytes";
-        // optional code for multiples approximation
-        for (var aMultiples = ["KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"], nMultiple = 0, nApprox = nBytes / 1024; nApprox > 1; nApprox /= 1024, nMultiple++) {
-          sOutput = nApprox.toFixed(3) + " " + aMultiples[nMultiple] + " (" + nBytes + " bytes)";
-          fileSize = nApprox.toFixed(0);
-          fileSizeUnit = aMultiples[nMultiple];
-        }
-        console.log(`Size of file ${name}: ${sOutput}`);
-        mspImage.size = file.size;
-        mspImage.sizeTxt = sOutput;
-        mspImage.name = file.name;
-        mspImage.contentType = file.type;
+    let self = this;
 
-        let imgEl: HTMLImageElement = document.createElement('img');
-        imgEl.src = reader.result;
+    // First scale the image
+    let scaledImage = loadImage(
+      file,
+      function (canvas: HTMLCanvasElement) {
+
+        // While it's still in a canvas, get it's height and width
+        mspImage.naturalWidth = canvas.width;
+        mspImage.naturalHeight = canvas.height;
 
         console.log(`image file natural height and width: 
-            ${imgEl.naturalHeight} x ${imgEl.naturalWidth}`);
+            ${mspImage.naturalHeight} x ${mspImage.naturalWidth}`);
 
-        mspImage.naturalHeight = imgEl.naturalHeight;
-        mspImage.naturalWidth = imgEl.naturalWidth;
+        // Convert to grayscale
+        //self.makeGrayScale(canvas);
+
+        // Convert to blob
+        canvas.toBlob((blob: Blob) => {
+
+            // Copy the blob properties
+            mspImage.size = blob.size;
+
+            let nBytes = mspImage.size;
+            let fileSize = '';
+            let fileSizeUnit = '';
+            let sOutput: string = nBytes + " bytes";
+            // optional code for multiples approximation
+            for (var aMultiples = ["KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"], nMultiple = 0, nApprox = nBytes / 1024; nApprox > 1; nApprox /= 1024, nMultiple++) {
+              sOutput = nApprox.toFixed(3) + " " + aMultiples[nMultiple] + " (" + nBytes + " bytes)";
+              fileSize = nApprox.toFixed(0);
+              fileSizeUnit = aMultiples[nMultiple];
+            }
+
+            console.log(`Size of file ${name}: ${sOutput}`);
+            mspImage.sizeTxt = sOutput;
+
+
+            // call reader with new transformed image
+            reader.readAsDataURL(blob);
+
+          },
+          // What mime type to make the blob as
+          mspImage.contentType);
+      },
+      {
+        maxWidth: 2600,
+        maxHeight: 3300,
+        contain: true,
+        canvas: true
+      }
+    );
+
+    // This method will convert blob to a data URL
+    let fileObservable = Observable.create((observer: any) => {
+      reader.onload = function (evt: any) {
+
+        mspImage.fileContent = reader.result;
+        mspImage.id = sha1(reader.result);
 
         observer.next(mspImage);
         observer.complete();
       }
     });
 
-    reader.readAsDataURL(file);
-
     return fileObservable;
   }
 
+  /**
+   * Non reversible image filter to take an existing canvas and make it gray scale
+   * @param canvas
+   */
+  makeGrayScale(canvas: HTMLCanvasElement): void {
+    let context = canvas.getContext('2d');
+
+    let imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+    let data = imageData.data;
+
+    for (let i = 0; i < data.length; i += 4) {
+      let brightness = 0.34 * data[i] + 0.5 * data[i + 1] + 0.16 * data[i + 2];
+      // red
+      data[i] = brightness;
+      // green
+      data[i + 1] = brightness;
+      // blue
+      data[i + 2] = brightness;
+    }
+
+    // overwrite original image
+    context.putImageData(imageData, 0, 0);
+  }
+
+
   handleImageFile(mspImage: MspImage) {
-    if(this.images.length >= this.MAX_IMAGE_COUNT){
+    if (this.images.length >= this.MAX_IMAGE_COUNT) {
       console.log(`Max number of image file you can upload is ${this.MAX_IMAGE_COUNT}. 
-      This file ${mspImage.name} was not uploaded.` );
-    }else{
-        this.onAddDocument.emit(mspImage);
+      This file ${mspImage.name} was not uploaded.`);
+    } else {
+      this.onAddDocument.emit(mspImage);
     }
   }
 
 
-  getFileSizeOutputString(file: File){
-      let nBytes = file.size;
-      let fileSize = '';
-      let fileSizeUnit = '';
-      let name = file.name;
-      let sOutput:string = nBytes + " bytes";
-      // optional code for multiples approximation
-      for (var aMultiples = ["KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"], nMultiple = 0, nApprox = nBytes / 1024; nApprox > 1; nApprox /= 1024, nMultiple++) {
-        sOutput = nApprox.toFixed(3) + " " + aMultiples[nMultiple] + " (" + nBytes + " bytes)";
-        fileSize = nApprox.toFixed(0);
-        fileSizeUnit = aMultiples[nMultiple];
-      }
-      console.log(`Size of file ${name}: ${sOutput}`);
-      return sOutput;
+  getFileSizeOutputString(file: File) {
+    let nBytes = file.size;
+    let fileSize = '';
+    let fileSizeUnit = '';
+    let name = file.name;
+    let sOutput: string = nBytes + " bytes";
+    // optional code for multiples approximation
+    for (var aMultiples = ["KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"], nMultiple = 0, nApprox = nBytes / 1024; nApprox > 1; nApprox /= 1024, nMultiple++) {
+      sOutput = nApprox.toFixed(3) + " " + aMultiples[nMultiple] + " (" + nBytes + " bytes)";
+      fileSize = nApprox.toFixed(0);
+      fileSizeUnit = aMultiples[nMultiple];
+    }
+    console.log(`Size of file ${name}: ${sOutput}`);
+    return sOutput;
   }
 
-  deleteImage(mspImage:MspImage){
+  deleteImage(mspImage: MspImage) {
     this.onDeleteDocument.emit(mspImage);
   }
 
@@ -195,17 +244,17 @@ export class FileUploaderComponent implements OnInit {
    * Return true if file already exists in the list; false otherwise.
    */
   checkImageExists(file: MspImage, imageList: Array<MspImage>) {
-    if(!imageList){
+    if (!imageList) {
       return false;
-    }else{
+    } else {
       let sha1Sum = sha1(file.fileContent);
-      for(var i = imageList.length -1; i >= 0 ; i--){
+      for (var i = imageList.length - 1; i >= 0; i--) {
         // console.log(`compare  ${imageList[i].id} with ${sha1Sum}, result ${imageList[i].id === sha1Sum}`);
-          if(imageList[i].id === sha1Sum){
-            console.log(`This file ${file.name} has already been uploaded.`);
-            return true;
-          }
-      }    
+        if (imageList[i].id === sha1Sum) {
+          console.log(`This file ${file.name} has already been uploaded.`);
+          return true;
+        }
+      }
       return false;
     }
   }
@@ -217,7 +266,7 @@ export class FileUploaderComponent implements OnInit {
     return this.images.length;
   }
 
-  get MAX_NUM_IMAGES(): number{
+  get MAX_NUM_IMAGES(): number {
     return this.MAX_IMAGE_COUNT;
   }
 
