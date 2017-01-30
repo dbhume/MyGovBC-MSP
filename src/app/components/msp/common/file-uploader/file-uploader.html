@@ -20,7 +20,6 @@
     <div *ngFor="let mspImage of images" class="preview-item">
       <msp-thumbnail [imageObject] ="mspImage" (delete) = "deleteImage($event)">
       </msp-thumbnail>
-      <canvas id="{{mspImage.uuid}}"></canvas>
     </div>
   </div>
 

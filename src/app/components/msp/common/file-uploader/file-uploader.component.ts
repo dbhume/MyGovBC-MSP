@@ -12,7 +12,7 @@ import 'rxjs/add/operator/catch';
 // import 'rxjs/add/operator/filereader';
 // import Rx from 'rx-dom';
 
-let fabricjs = require('fabric');
+let loadImage = require('blueimp-load-image');
 
 var sha1 =  require('sha1');
 
@@ -106,6 +106,18 @@ export class FileUploaderComponent implements OnInit {
   observableFromFile(file:File){
     let reader:FileReader = new FileReader();
 
+    // let scaledImage = loadImage.scale(
+    //   file, // img element
+    //   function (img:HTMLImageElement) {
+    //     mspImage.fileContent = img.src;
+    //
+    //
+    //
+    //
+    //   },
+    //   {maxWidth: 600}
+    // );
+    //
     let fileObservable = Observable.create((observer:any) => {
       reader.onload = function(evt:any) {
         let mspImage: MspImage = new MspImage();
@@ -129,7 +141,7 @@ export class FileUploaderComponent implements OnInit {
         mspImage.sizeTxt = sOutput;
         mspImage.name = file.name;
         mspImage.contentType = file.type;
-        
+
         let imgEl: HTMLImageElement = document.createElement('img');
         imgEl.src = reader.result;
 
@@ -138,8 +150,6 @@ export class FileUploaderComponent implements OnInit {
 
         mspImage.naturalHeight = imgEl.naturalHeight;
         mspImage.naturalWidth = imgEl.naturalWidth;
-
-        let canvas = new fabricjs.fabric.Canvas(mspImage.uuid);
 
         observer.next(mspImage);
         observer.complete();
