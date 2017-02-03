@@ -24,8 +24,8 @@ module.exports = {
                 {
                     document: 0,
                     title: "Canadian Birth Certificate",
-                    body: "<ul><li>Include entire page, corner to corner</li><li>Ensure all text is legible and photo is in focus</li></ul>",
-                    image: ""
+                    body: "<ul><li>Include front and back</li><li>Ensure all text is legible and photo is in focus</li></ul>",
+                    image: require('./images/canadian_birth_certs.jpg')
                 },
                 {
                     document: 1,
@@ -35,9 +35,9 @@ module.exports = {
                 },
                 {
                     document: 2,
-                    title: "Canadian Citizenship Card",
-                    body: "sample body",
-                    image: ""
+                    title: "Canadian Citizenship Card or Certificate",
+                    body: "<ul><li>Include front and back, corner to corner</li></ul>",
+                    image: require('./images/canadian_cit_card-cert.jpg')
                 }
             ]
         },
@@ -45,11 +45,17 @@ module.exports = {
             residency: "Permanent Residents",
 
             documentContentList: [
+                 {
+                    document: 3,
+                    title: "Record of Landing",
+                    body: "<ul><li>Must include full legal document including date and signature.</li><li>Must be signed by Canadian Immigration</li></ul>",
+                    image: ""
+                },
                 {
                     document: 4,
-                    title: "Confirmation of Permanent Residence",
-                    body: "Sample body",
-                    image: ""
+                    title: "Permanent Resident Card",
+                    body: "<ul><li>Must include full legal document including date and signature.</li><li>Must be signed by Canadian Immigration</li></ul>",
+                    image: require('./images/pr_card.jpg')
                 }
             ]
         },
@@ -58,27 +64,21 @@ module.exports = {
 
             documentContentList: [
                 {
-                    document: 3,
-                    title: "Record of Landing",
-                    body: "Sample body",
-                    image: ""
-                },
-                {
                     document: 5,
                     title: "Work Permit",
-                    body: "Sample body",
+                    body: "<ul><li>Must be valid for six months or longer</li></ul>",
                     image: ""
                 },
                 {
                     document: 6,
                     title: "Study Permit",
-                    body: "Sample body",
-                    image: ""
+                    body: "<ul><li>Must be valid for six months or longer</li></ul>",
+                    image: require('./images/study-permit.jpg')
                 },
                  {
                     document: 7,
                     title: "Visitor Visa",
-                    body: "Sample body",
+                    body: "<ul><li>Must state religious worker on document under remarks</li></ul>",
                     image: ""
                 }
             ]
@@ -89,7 +89,7 @@ module.exports = {
             documentContentList: [
                 {
                     document: 8,
-                    title: "Canadian Passport with diplomatic foil",
+                    title: "Valid Passport With Entry Stamps and Acceptance Foils",
                     body: "Sample body",
                     image: ""
                 }
@@ -103,7 +103,7 @@ module.exports = {
                     document: 9,
                     title: "Marriage Certificate",
                     body: "<ul><li>Include entire page, corner to corner</li><li>Ensure all text is legible and photo is in focus</li></ul>",
-                    image: ""
+                    image: require('./images/large-marriage-cert-big.jpg')
                 },
                 {
                     document: 10,

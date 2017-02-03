@@ -6,10 +6,21 @@ import {UUID} from "angular2-uuid";
 import { MspImage } from "./msp-image";
 import moment = require("moment");
 import {ApplicationBase} from "./application-base.model";
+import {AssistanceYear} from './assistance-year.model';
+
+export enum AssistanceApplicationType {
+  CurrentYear,
+  PreviousTwoYears,
+  MultiYear
+}
 
 export class FinancialAssistApplication implements ApplicationBase {
 
   readonly uuid = UUID.UUID();
+
+  assistYears:AssistanceYear[] = [];
+  assistYeaDocs:MspImage[] = [];
+
   infoCollectionAgreement: boolean = false;
 
   applicantClaimForAttendantCareExpense:boolean = false;
@@ -272,7 +283,57 @@ export class FinancialAssistApplication implements ApplicationBase {
    * Power of atterney docs and attendant care expense receipts
    */
   getAllImages():MspImage[] {
-    return [...this.powerOfAttorneyDocs, ...this.attendantCareExpenseReceipts];
+    return [...this.powerOfAttorneyDocs, ...this.attendantCareExpenseReceipts, ...this.assistYeaDocs];
+  }
+
+  /**
+   * Filters out years not applied for
+   * @returns {AssistanceYear[]}
+   */
+  getAppliedForTaxYears (): AssistanceYear[] {
+    return this.assistYears.filter((value:AssistanceYear) => {
+      return value.apply;
+    });
+  }
+
+  /**
+   * Sorts descending the applied for tax years
+   */
+  getMostRecentAppliedForTaxYears(): AssistanceYear[] {
+    return this.getAppliedForTaxYears().sort((a:AssistanceYear, b:AssistanceYear) => {
+      return a.year - b.year;
+    })
+  }
+
+  /**
+   * Determines what type of application this is based on tax years specified
+   * @returns {AssistanceApplicationType}
+   */
+  getAssistanceApplicationType (): AssistanceApplicationType {
+    let mostRecentAppliedForTaxYears = this.getMostRecentAppliedForTaxYears();
+
+    if (mostRecentAppliedForTaxYears == null ||
+      mostRecentAppliedForTaxYears.length < 1) {
+      return AssistanceApplicationType.CurrentYear;
+    }
+
+    // If we only have one and it's last year
+    if (mostRecentAppliedForTaxYears &&
+      mostRecentAppliedForTaxYears.length === 1 &&
+      mostRecentAppliedForTaxYears[0].year === moment().year() - 1) {
+      return AssistanceApplicationType.PreviousTwoYears;
+    }
+
+    return AssistanceApplicationType.MultiYear;
+
+  }
+
+  /**
+   * It ALWAYS returns most recent applied for year which is always this year
+   * @returns {number}
+   */
+  getTaxYear():number {
+    return moment().year();
   }
 
   constructor(){
