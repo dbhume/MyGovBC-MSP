@@ -19,30 +19,6 @@ require('./landing.component.less')
 export class LandingComponent {
   lang = require('./i18n')
 
-  images = new Array<MspImage>();
-  @ViewChild('mspImageErrorModal') mspImageErrorModal: MspImageErrorModalComponent;
-  @ViewChild('fileUploader') fileUploader: FileUploaderComponent;
-
-  addDocument(evt:MspImage){
-    console.log('parent image added: ', evt);
-    this.images.push(evt);
-    this.fileUploader.forceRender();
-  }
-
-  deleteDocument(evt:MspImage){
-    this.images = this.images.filter(
-      (mspImage:MspImage) => {
-        return evt.uuid !== mspImage.uuid;
-      }
-    );
-  }
-
-  errorDocument(evt:MspImage) {
-    this.mspImageErrorModal.imageWithError = evt;
-    this.mspImageErrorModal.showFullSizeView();
-    this.mspImageErrorModal.forceRender();
-  }
-
   constructor(private mspDataService:MspDataService, private router: Router){
 
   }
