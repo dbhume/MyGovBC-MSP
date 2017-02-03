@@ -1,15 +1,13 @@
 import {
-  Component, ViewChild, ElementRef, OnInit, EventEmitter, ViewContainerRef, Output, Input,
-  Inject
+  Component, ViewChild, ElementRef, OnInit, EventEmitter, Output, Input,
+  Inject, NgZone
 } from '@angular/core';
-import {DomSanitizer, SafeUrl} from '@angular/platform-browser';
-import {MspImage} from '../../model/msp-image';
+import {MspImage, MspImageError} from '../../model/msp-image';
 import {Observable} from 'rxjs/Observable';
 import 'rxjs/add/observable/fromEvent';
 import 'rxjs/add/operator/map';
 import 'rxjs/add/operator/do';
 import 'rxjs/add/operator/catch';
-import {ModalDirective} from "ng2-bootstrap";
 
 let loadImage = require('blueimp-load-image');
 
@@ -23,34 +21,33 @@ require('./file-uploader.component.less');
 export class FileUploaderComponent implements OnInit {
   lang = require('./i18n');
 
-  @ViewChild('previewZone') previewZone: ElementRef;
   @ViewChild('dropZone') dropZone: ElementRef;
   @ViewChild('browseFileRef') browseFileRef: ElementRef;
   @ViewChild('captureFileRef') captureFileRef: ElementRef;
-  @ViewChild('errorModal') public fullSizeViewModal: ModalDirective;
-
-  private trustedUrl: SafeUrl;
-  private maxFileSize: number;
-  private fileSizeError: string;
-  private MAX_IMAGE_COUNT: number = 10;
-
-  imageWithError: MspImage;
 
   @Input() images: Array<MspImage>;
   @Input() id: string;
 
   @Output() onAddDocument: EventEmitter<MspImage> = new EventEmitter<MspImage>();
+  @Output() onErrorDocument: EventEmitter<MspImage> = new EventEmitter<MspImage>();
   @Output() onDeleteDocument: EventEmitter<MspImage> = new EventEmitter<MspImage>();
 
-  constructor(private sanitizer: DomSanitizer,
-              private viewContainerRef: ViewContainerRef,
-              @Inject('appConstants') private appConstants: Object) {
-    this.maxFileSize = 8 * 1024 * 1024;
+  constructor(@Inject('appConstants') private appConstants: any,
+              private zone:NgZone) {
+  }
+
+  /**
+   * A special method to force the rendering of this component.  This is a workaround
+   * because for some unknown reason, AngularJS2 change detector does not detect the
+   * change of the images Array.
+   */
+  forceRender() {
+    this.zone.run(() => {});
   }
 
   ngOnInit(): void {
     // console.log('subscribe to drop event.');
-    var dragOverStream =
+    let dragOverStream =
       Observable.fromEvent<DragEvent>(this.dropZone.nativeElement, "dragover");
 
     /**
@@ -63,19 +60,19 @@ export class FileUploaderComponent implements OnInit {
       evt.preventDefault();
     });
 
-    var dropStream = Observable.fromEvent<DragEvent>(this.dropZone.nativeElement, "drop");
+    let dropStream = Observable.fromEvent<DragEvent>(this.dropZone.nativeElement, "drop");
 
-    var filesArrayFromDrop = dropStream.map(
+    let filesArrayFromDrop = dropStream.map(
       function (event) {
         event.preventDefault();
         return event.dataTransfer.files;
       }
-    )
+    );
 
-    var browseFileStream = Observable.fromEvent<Event>(this.browseFileRef.nativeElement, 'change');
-    var captureFileStream = Observable.fromEvent<Event>(this.captureFileRef.nativeElement, 'change');
+    let browseFileStream = Observable.fromEvent<Event>(this.browseFileRef.nativeElement, 'change');
+    let captureFileStream = Observable.fromEvent<Event>(this.captureFileRef.nativeElement, 'change');
 
-    var filesArrayFromInput = browseFileStream.merge(captureFileStream)
+    let filesArrayFromInput = browseFileStream.merge(captureFileStream)
       .map(
         (event) => {
           event.preventDefault();
@@ -84,102 +81,115 @@ export class FileUploaderComponent implements OnInit {
       ).merge(filesArrayFromDrop)
       .filter(files => {
         return !!files && files.length && files.length > 0;
-      }).filter((files) => {
-        return files[0].size <= this.maxFileSize;
       }).flatMap(
         (fileList: FileList) => {
           return this.observableFromFile(fileList[0]);
         }
+      )
+      .filter(
+        (mspImage: MspImage) => {
+          let imageExists = FileUploaderComponent.checkImageExists(mspImage, this.images);
+          if (imageExists) this.handleError(MspImageError.AlreadyExists, mspImage);
+          return !imageExists;
+        }
       ).filter(
         (mspImage: MspImage) => {
-          return !this.checkImageExists(mspImage, this.images);
+          let imageSizeOk = this.checkImageSizeProperties(mspImage);
+          if (!imageSizeOk) this.handleError(MspImageError.TooSmall, mspImage);
+          return imageSizeOk;
         }
       )
       .subscribe(
         (file: MspImage) => {
-
           this.handleImageFile(file);
         },
 
         (error) => {
-          console.log('drop event error detected:');
           console.log(error);
         }
-      );
+      )
+
   }
 
   observableFromFile(file: File) {
     // Init
-    let reader: FileReader = new FileReader();
-    let mspImage: MspImage = new MspImage();
-
-    // Copy file properties
-    mspImage.name = file.name;
-    mspImage.contentType = file.type;
-
     let self = this;
 
-    // First scale the image
-    let scaledImage = loadImage(
-      file,
-      function (canvas: HTMLCanvasElement) {
+    // Create our observer
+    let fileObservable = Observable.create((observer: any) => {
 
-        // While it's still in a canvas, get it's height and width
-        mspImage.naturalWidth = canvas.width;
-        mspImage.naturalHeight = canvas.height;
+      let reader: FileReader = new FileReader();
+      let mspImage: MspImage = new MspImage();
 
-        console.log(`image file natural height and width: 
+      // Copy file properties
+      mspImage.name = file.name;
+
+      // Canvas will force the change to a JPEG
+      mspImage.contentType = self.appConstants.images.convertToMimeType;
+
+      // First scale the image by loading into a canvas
+      let scaledImage = loadImage(
+        file,
+        function (canvas: HTMLCanvasElement) {
+
+          // Canvas may be an Event when errors happens
+          if (canvas instanceof Event) {
+            self.handleError(MspImageError.WrongType, mspImage);
+            return;
+          }
+
+          // While it's still in a canvas, get it's height and width
+          mspImage.naturalWidth = canvas.width;
+          mspImage.naturalHeight = canvas.height;
+
+          console.log(`image file natural height and width: 
             ${mspImage.naturalHeight} x ${mspImage.naturalWidth}`);
 
-        // Convert to grayscale
-        //self.makeGrayScale(canvas);
+          // Convert to grayscale
+          //self.makeGrayScale(canvas);
 
-        // Convert to blob
-        canvas.toBlob((blob: Blob) => {
+          // Convert to blob to get size
+          canvas.toBlob((blob: Blob) => {
 
-            // Copy the blob properties
-            mspImage.size = blob.size;
+              // Copy the blob properties
+              mspImage.size = blob.size;
 
-            let nBytes = mspImage.size;
-            let fileSize = '';
-            let fileSizeUnit = '';
-            let sOutput: string = nBytes + " bytes";
-            // optional code for multiples approximation
-            for (var aMultiples = ["KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"], nMultiple = 0, nApprox = nBytes / 1024; nApprox > 1; nApprox /= 1024, nMultiple++) {
-              sOutput = nApprox.toFixed(3) + " " + aMultiples[nMultiple] + " (" + nBytes + " bytes)";
-              fileSize = nApprox.toFixed(0);
-              fileSizeUnit = aMultiples[nMultiple];
-            }
+              let nBytes = mspImage.size;
+              let fileSize = '';
+              let fileSizeUnit = '';
+              let sOutput: string = nBytes + " bytes";
+              // optional code for multiples approximation
+              for (let aMultiples = ["KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"], nMultiple = 0, nApprox = nBytes / 1024; nApprox > 1; nApprox /= 1024, nMultiple++) {
+                sOutput = nApprox.toFixed(3) + " " + aMultiples[nMultiple] + " (" + nBytes + " bytes)";
+                fileSize = nApprox.toFixed(0);
+                fileSizeUnit = aMultiples[nMultiple];
+              }
 
-            console.log(`Size of file ${name}: ${sOutput}`);
-            mspImage.sizeTxt = sOutput;
+              console.log(`Size of file ${name}: ${sOutput}`);
+              mspImage.sizeTxt = sOutput;
 
+              // call reader with new transformed image
+              reader.onload = function (evt: any) {
 
-            // call reader with new transformed image
-            reader.readAsDataURL(blob);
+                mspImage.fileContent = evt.target.result;
+                mspImage.id = sha1(mspImage.fileContent);
 
-          },
-          // What mime type to make the blob as
-          mspImage.contentType);
-      },
-      {
-        maxWidth: 2600,
-        maxHeight: 3300,
-        contain: true,
-        canvas: true
-      }
-    );
+                observer.next(mspImage);
+              };
+              reader.readAsDataURL(blob);
 
-    // This method will convert blob to a data URL
-    let fileObservable = Observable.create((observer: any) => {
-      reader.onload = function (evt: any) {
+            },
 
-        mspImage.fileContent = reader.result;
-        mspImage.id = sha1(reader.result);
-
-        observer.next(mspImage);
-        observer.complete();
-      }
+            // What mime type to make the blob as and jpeg quality
+            self.appConstants.images.convertToMimeType, self.appConstants.images.jpegQuality);
+        },
+        {
+          maxWidth: self.appConstants.images.maxWidth,
+          maxHeight: self.appConstants.images.maxHeight,
+          contain: true,
+          canvas: true
+        }
+      );
     });
 
     return fileObservable;
@@ -211,29 +221,19 @@ export class FileUploaderComponent implements OnInit {
 
 
   handleImageFile(mspImage: MspImage) {
-    if (this.images.length >= this.MAX_IMAGE_COUNT) {
-      console.log(`Max number of image file you can upload is ${this.MAX_IMAGE_COUNT}. 
+    if (this.images.length >= this.appConstants.images.maxImagesPerPerson) {
+      console.log(`Max number of image file you can upload is ${this.appConstants.images.maxImagesPerPerson}. 
       This file ${mspImage.name} was not uploaded.`);
     } else {
       this.onAddDocument.emit(mspImage);
     }
   }
 
-
-  getFileSizeOutputString(file: File) {
-    let nBytes = file.size;
-    let fileSize = '';
-    let fileSizeUnit = '';
-    let name = file.name;
-    let sOutput: string = nBytes + " bytes";
-    // optional code for multiples approximation
-    for (var aMultiples = ["KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"], nMultiple = 0, nApprox = nBytes / 1024; nApprox > 1; nApprox /= 1024, nMultiple++) {
-      sOutput = nApprox.toFixed(3) + " " + aMultiples[nMultiple] + " (" + nBytes + " bytes)";
-      fileSize = nApprox.toFixed(0);
-      fileSizeUnit = aMultiples[nMultiple];
-    }
-    console.log(`Size of file ${name}: ${sOutput}`);
-    return sOutput;
+  handleError(error:MspImageError, mspImage: MspImage) {
+    // just add the error to mspImage
+    mspImage.error = error;
+    console.log("error with image: ", mspImage);
+    this.onErrorDocument.emit(mspImage);
   }
 
   deleteImage(mspImage: MspImage) {
@@ -243,12 +243,13 @@ export class FileUploaderComponent implements OnInit {
   /**
    * Return true if file already exists in the list; false otherwise.
    */
-  checkImageExists(file: MspImage, imageList: Array<MspImage>) {
-    if (!imageList) {
+  static checkImageExists(file: MspImage, imageList: Array<MspImage>) {
+    if (!imageList || imageList.length < 1) {
       return false;
     } else {
+
       let sha1Sum = sha1(file.fileContent);
-      for (var i = imageList.length - 1; i >= 0; i--) {
+      for (let i = imageList.length - 1; i >= 0; i--) {
         // console.log(`compare  ${imageList[i].id} with ${sha1Sum}, result ${imageList[i].id === sha1Sum}`);
         if (imageList[i].id === sha1Sum) {
           console.log(`This file ${file.name} has already been uploaded.`);
@@ -260,14 +261,16 @@ export class FileUploaderComponent implements OnInit {
   }
 
   /**
-   * Get the current image count
+   * Return true if the image size is within range
+   * @param file
    */
-  imageCount() {
-    return this.images.length;
-  }
+  checkImageSizeProperties(file: MspImage): boolean {
+    if (file.naturalHeight <  this.appConstants.images.minHeight ||
+      file.naturalWidth < this.appConstants.images.minWidth) {
+      return false;
+    }
 
-  get MAX_NUM_IMAGES(): number {
-    return this.MAX_IMAGE_COUNT;
+    return true;
   }
 
 }

@@ -36,8 +36,11 @@
 </div>
 <div class="row">
   <div class="col-lg-12">
-    <msp-file-uploader [images]="images" [id]="123"
+    <msp-file-uploader #fileUploader
+                        [images]="images" [id]="123"
                        (onAddDocument)="addDocument($event)"
+                       (onErrorDocument)="errorDocument($event)"
                        (onDeleteDocument)="deleteDocument($event)"></msp-file-uploader>
   </div>
 </div>
+<msp-image-error-modal #mspImageErrorModal></msp-image-error-modal>

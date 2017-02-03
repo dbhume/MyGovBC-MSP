@@ -1,7 +1,9 @@
-import { Component } from '@angular/core';
+import {Component, ViewChild} from '@angular/core';
 import MspDataService from '../service/msp-data.service';
 import { Router } from '@angular/router';
 import {MspImage} from "../model/msp-image";
+import {MspImageErrorModalComponent} from "../common/image-error-modal/image-error-modal.component";
+import {FileUploaderComponent} from "../common/file-uploader/file-uploader.component";
 
 require('./landing.component.less')
 
@@ -18,11 +20,13 @@ export class LandingComponent {
   lang = require('./i18n')
 
   images = new Array<MspImage>();
+  @ViewChild('mspImageErrorModal') mspImageErrorModal: MspImageErrorModalComponent;
+  @ViewChild('fileUploader') fileUploader: FileUploaderComponent;
 
   addDocument(evt:MspImage){
-    console.log('image added: %s', evt);
-    this.images = [...this.images, evt];
-
+    console.log('parent image added: ', evt);
+    this.images.push(evt);
+    this.fileUploader.forceRender();
   }
 
   deleteDocument(evt:MspImage){
@@ -31,6 +35,12 @@ export class LandingComponent {
         return evt.uuid !== mspImage.uuid;
       }
     );
+  }
+
+  errorDocument(evt:MspImage) {
+    this.mspImageErrorModal.imageWithError = evt;
+    this.mspImageErrorModal.showFullSizeView();
+    this.mspImageErrorModal.forceRender();
   }
 
   constructor(private mspDataService:MspDataService, private router: Router){
